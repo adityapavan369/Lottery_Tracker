@@ -3,15 +3,34 @@ const cors = require('cors');
 const bodyParser = require('body-parser');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const rateLimit = require('express-rate-limit');
 const db = require('./database');
 require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
+const TICKET_PRICE = 1.00; // Price per ticket in dollars
 
 app.use(cors());
 app.use(bodyParser.json());
+
+// Rate limiting middleware
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // Limit each IP to 5 requests per windowMs for auth endpoints
+  message: 'Too many authentication attempts, please try again later',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // Limit each IP to 100 requests per windowMs for other endpoints
+  message: 'Too many requests, please try again later',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 // Middleware to verify JWT token
 const authenticateToken = (req, res, next) => {
@@ -32,7 +51,7 @@ const authenticateToken = (req, res, next) => {
 };
 
 // Auth endpoints
-app.post('/api/auth/register', async (req, res) => {
+app.post('/api/auth/register', authLimiter, async (req, res) => {
   const { email, password } = req.body;
 
   if (!email || !password) {
@@ -62,7 +81,7 @@ app.post('/api/auth/register', async (req, res) => {
   }
 });
 
-app.post('/api/auth/login', (req, res) => {
+app.post('/api/auth/login', authLimiter, (req, res) => {
   const { email, password } = req.body;
 
   if (!email || !password) {
@@ -89,7 +108,7 @@ app.post('/api/auth/login', (req, res) => {
 });
 
 // Inventory endpoints
-app.post('/api/inventory/add-pack', authenticateToken, (req, res) => {
+app.post('/api/inventory/add-pack', apiLimiter, authenticateToken, (req, res) => {
   const { name, packSize, qrCode } = req.body;
   const userId = req.user.id;
 
@@ -119,7 +138,7 @@ app.post('/api/inventory/add-pack', authenticateToken, (req, res) => {
   );
 });
 
-app.get('/api/inventory/packs', authenticateToken, (req, res) => {
+app.get('/api/inventory/packs', apiLimiter, authenticateToken, (req, res) => {
   const userId = req.user.id;
 
   db.all(
@@ -135,7 +154,7 @@ app.get('/api/inventory/packs', authenticateToken, (req, res) => {
 });
 
 // Daily sales endpoints
-app.post('/api/sales/start-day', authenticateToken, (req, res) => {
+app.post('/api/sales/start-day', apiLimiter, authenticateToken, (req, res) => {
   const { packId, startTicketNumber } = req.body;
   const userId = req.user.id;
   const today = new Date().toISOString().split('T')[0];
@@ -179,7 +198,7 @@ app.post('/api/sales/start-day', authenticateToken, (req, res) => {
   );
 });
 
-app.get('/api/sales/previous-end-number', authenticateToken, (req, res) => {
+app.get('/api/sales/previous-end-number', apiLimiter, authenticateToken, (req, res) => {
   const userId = req.user.id;
 
   db.get(
@@ -196,7 +215,7 @@ app.get('/api/sales/previous-end-number', authenticateToken, (req, res) => {
   );
 });
 
-app.post('/api/sales/close-day', authenticateToken, (req, res) => {
+app.post('/api/sales/close-day', apiLimiter, authenticateToken, (req, res) => {
   const { endTicketNumber } = req.body;
   const userId = req.user.id;
   const today = new Date().toISOString().split('T')[0];
@@ -218,9 +237,9 @@ app.post('/api/sales/close-day', authenticateToken, (req, res) => {
         return res.status(404).json({ error: 'No open sale found for today' });
       }
 
-      // Calculate tickets sold and revenue (assuming $1 per ticket)
+      // Calculate tickets sold and revenue
       const ticketsSold = endTicketNumber - sale.start_ticket_number + 1;
-      const totalRevenue = ticketsSold * 1.00; // $1 per ticket
+      const totalRevenue = ticketsSold * TICKET_PRICE;
 
       db.run(
         'UPDATE daily_sales SET end_ticket_number = ?, tickets_sold = ?, total_revenue = ?, status = ?, closed_at = CURRENT_TIMESTAMP WHERE id = ?',
@@ -245,7 +264,7 @@ app.post('/api/sales/close-day', authenticateToken, (req, res) => {
   );
 });
 
-app.get('/api/sales/today', authenticateToken, (req, res) => {
+app.get('/api/sales/today', apiLimiter, authenticateToken, (req, res) => {
   const userId = req.user.id;
   const today = new Date().toISOString().split('T')[0];
 
@@ -265,7 +284,7 @@ app.get('/api/sales/today', authenticateToken, (req, res) => {
   );
 });
 
-app.get('/api/sales/history', authenticateToken, (req, res) => {
+app.get('/api/sales/history', apiLimiter, authenticateToken, (req, res) => {
   const userId = req.user.id;
 
   db.all(

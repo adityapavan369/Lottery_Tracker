@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, Alert } from 'react-native';
 import { TextInput, Button, Title, Text, List } from 'react-native-paper';
 import { salesAPI } from '../services/api';
-import { Picker } from '@react-native-picker/picker';
 
 export default function StartDayScreen({ navigation, route }) {
   const { packs, previousEndNumber, onDayStarted } = route.params;

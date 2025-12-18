@@ -37,8 +37,9 @@ export default function CloseDayScreen({ navigation, route }) {
     const endNum = parseInt(endNumber);
     if (isNaN(endNum)) return null;
     
+    const TICKET_PRICE = 1.00; // Should match backend configuration
     const ticketsSold = endNum - sale.start_ticket_number + 1;
-    const totalRevenue = ticketsSold * 1.00; // $1 per ticket
+    const totalRevenue = ticketsSold * TICKET_PRICE;
     
     return { ticketsSold, totalRevenue };
   };
